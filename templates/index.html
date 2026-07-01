@@ -1,0 +1,1566 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>图片管理工具 v2</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d1117;--panel:#161b22;--panel-2:#1c2128;--border:#30363d;
+  --text:#c9d1d9;--text-dim:#8b949e;--text-bright:#f0f6fc;
+  --accent:#7c3aed;--accent-hover:#8b5cf6;--accent-dim:#6d28d9;
+  --danger:#ef4444;--success:#22c55e;--warn:#f59e0b;
+  --radius:8px;--radius-sm:4px;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+}
+body{background:var(--bg);color:var(--text);height:100vh;overflow:hidden;display:flex;flex-direction:column}
+button{cursor:pointer;font-family:inherit}button:disabled{cursor:not-allowed;opacity:.5}
+header{display:flex;align-items:center;gap:8px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0}
+header h1{font-size:16px;color:var(--text-bright);font-weight:600}
+.nav-tabs{display:flex;gap:4px;margin-left:16px}
+.nav-tab{padding:6px 14px;background:transparent;color:var(--text-dim);border:1px solid transparent;border-radius:var(--radius-sm);font-size:13px;transition:all .15s}
+.nav-tab:hover{color:var(--text);background:var(--panel-2)}
+.nav-tab.active{color:var(--text-bright);background:var(--accent-dim);border-color:var(--accent)}
+.status-info{margin-left:auto;font-size:12px;color:var(--text-dim)}
+.status-info.warn{color:var(--warn)}.status-info.ok{color:var(--success)}
+.view{display:none;flex:1;overflow:hidden}.view.active{display:flex}
+
+/* === ALBUMS === */
+#view-albums{flex-direction:column}
+.albums-toolbar{padding:10px 16px;display:flex;gap:8px;align-items:center;background:var(--panel-2);border-bottom:1px solid var(--border);flex-shrink:0}
+.tag-filter{display:flex;gap:6px;flex-wrap:wrap;flex:1;align-items:center}
+.tag-chip{padding:3px 10px;border-radius:12px;font-size:11px;background:var(--bg);border:1px solid var(--border);color:var(--text-dim);cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:4px}
+.tag-chip:hover{color:var(--text)}.tag-chip.active{color:var(--text-bright);border-color:var(--accent);background:var(--accent-dim)}
+.tag-chip .dot{width:8px;height:8px;border-radius:50%}
+.albums-grid{flex:1;overflow-y:auto;padding:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(152px,1fr));gap:10px;align-content:start}
+.album-card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;transition:all .15s;position:relative}
+.album-card:hover{border-color:var(--accent);transform:translateY(-2px)}
+.album-card .album-actions{position:absolute;top:6px;right:6px;display:none;flex-direction:column;gap:3px;z-index:2}
+.album-card:hover .album-actions{display:flex}
+.album-card .album-act{padding:2px 8px;border-radius:4px;font-size:10px;border:none;color:white;background:rgba(0,0,0,.6)}
+.album-card .album-act:hover{background:rgba(0,0,0,.85)}
+.album-card .album-act.del:hover{background:var(--danger)}
+.album-cover{width:100%;aspect-ratio:1;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:48px;color:var(--text-dim);overflow:hidden;flex-shrink:0;position:relative;border-radius:var(--radius) var(--radius) 0 0}
+.album-cover img{width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .3s}
+.album-cover img.loaded{opacity:1}
+.album-cover .gif-badge{position:absolute;bottom:6px;right:6px;background:rgba(0,0,0,.7);color:#fff;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600}
+.album-cover .cover-tags{position:absolute;top:4px;left:4px;display:flex;gap:3px;flex-wrap:wrap;max-width:calc(100% - 40px);z-index:1}
+.album-cover .cover-tag{font-size:9px;padding:1px 5px;border-radius:6px;color:white;font-weight:500;text-shadow:0 1px 2px rgba(0,0,0,.5)}
+.album-info{padding:8px 10px;background:var(--panel);border-radius:0 0 var(--radius) var(--radius)}
+.album-card .album-name{font-size:12px;color:var(--text-bright);font-weight:500;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* === DETAIL === */
+.detail-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:100}
+.detail-overlay.show{display:flex}
+.detail-modal{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);width:92%;max-width:1100px;max-height:90vh;display:flex;flex-direction:column}
+.detail-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0}
+.detail-header h2{font-size:16px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.detail-batch-bar{display:none;align-items:center;gap:8px;padding:8px 14px;background:var(--accent-dim);border-bottom:1px solid var(--accent);font-size:12px}
+.detail-batch-bar.show{display:flex}
+.detail-batch-bar span{color:white}
+.detail-batch-bar .batch-count{font-weight:700;font-size:13px}
+.detail-body{flex:1;overflow-y:auto;padding:12px}
+.detail-body h3{font-size:13px;color:var(--text-dim);margin:8px 0 6px;padding-left:4px}
+.detail-body h3:first-child{margin-top:0}
+.detail-images{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px}
+.detail-img-wrap{position:relative;cursor:pointer;border-radius:var(--radius-sm);overflow:hidden;background:var(--bg);border:2px solid transparent}
+.detail-img-wrap.selected{border-color:var(--accent)}
+.detail-img-wrap:hover{transform:scale(1.04);transition:transform .15s;z-index:1}
+.detail-img-wrap img{width:100%;aspect-ratio:1;object-fit:cover;display:block;opacity:0;transition:opacity .3s}
+.detail-img-wrap img.loaded{opacity:1}
+.detail-img-wrap .gif-badge{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.75);color:#fff;font-size:9px;padding:2px 5px;border-radius:3px;font-weight:600}
+.detail-img-wrap .img-check{position:absolute;top:4px;left:4px;width:18px;height:18px;border-radius:3px;background:rgba(0,0,0,.5);border:1.5px solid rgba(255,255,255,.4);display:none;align-items:center;justify-content:center;font-size:11px;color:white}
+.detail-img-wrap .img-check.checked{display:flex;background:var(--accent);border-color:var(--accent)}
+.detail-img-wrap:hover .img-check{display:flex}
+.detail-images.batch-mode .img-check{display:flex}
+.detail-children{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.child-item{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--panel-2);border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;transition:all .15s;min-width:140px}
+.child-item:hover{border-color:var(--accent);background:var(--accent-dim)}
+.child-cover{width:42px;height:42px;border-radius:var(--radius-sm);background:var(--bg);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;font-size:20px;position:relative}
+.child-cover img{width:100%;height:100%;object-fit:cover}
+.child-cover .gif-badge{position:absolute;top:1px;right:1px;background:rgba(0,0,0,.8);color:#fff;font-size:8px;padding:1px 4px;border-radius:2px;font-weight:600}
+.child-info{flex:1;min-width:0}
+.child-name{font-size:13px;color:var(--text-bright);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
+.child-count{font-size:10px;color:var(--text-dim)}
+.tag-picker{padding:14px 18px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:6px;max-height:120px;overflow-y:auto;flex-shrink:0}
+.tag-pick{padding:4px 10px;border-radius:12px;font-size:11px;background:var(--bg);border:1px solid var(--border);color:var(--text-dim);cursor:pointer;display:flex;align-items:center;gap:4px}
+.tag-pick.active{color:white}
+.tag-pick .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+
+/* === MOVE PICKER === */
+.move-pick-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;z-index:310}
+.move-pick-overlay.show{display:flex}
+.move-pick-modal{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);width:420px;max-width:90vw;max-height:70vh;display:flex;flex-direction:column}
+.move-pick-modal .mp-header{padding:12px 16px;border-bottom:1px solid var(--border);font-size:14px;color:var(--text-bright);flex-shrink:0}
+.move-pick-modal .mp-search{padding:8px 12px;border-bottom:1px solid var(--border)}
+.move-pick-modal .mp-search input{width:100%;padding:6px 10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;outline:none}
+.move-pick-modal .mp-list{flex:1;overflow-y:auto;padding:8px}
+.move-pick-modal .mp-item{padding:8px 12px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;color:var(--text);transition:all .15s}
+.move-pick-modal .mp-item:hover{background:var(--accent-dim);color:white}
+.move-pick-modal .mp-footer{padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:6px;justify-content:flex-end;flex-shrink:0}
+
+/* === VIEWER === */
+.viewer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.92);display:none;align-items:center;justify-content:center;z-index:300;flex-direction:column}
+.viewer-overlay.show{display:flex}
+.viewer-img-wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:20px;width:100%;overflow:hidden;cursor:grab}
+.viewer-img-wrap.grabbing{cursor:grabbing}
+.viewer-img-wrap img{max-width:95%;max-height:90vh;object-fit:contain;border-radius:var(--radius);transform-origin:center center;transition:transform .15s ease;user-select:none;pointer-events:none}
+.viewer-toolbar{padding:10px 20px;display:flex;align-items:center;gap:12px;color:white;font-size:13px}
+.viewer-toolbar button,.viewer-nav .arrow{padding:6px 16px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:var(--radius-sm);color:white;font-size:13px;cursor:pointer}
+.viewer-toolbar button:hover,.viewer-nav .arrow:hover{background:rgba(255,255,255,.2)}
+.viewer-toolbar button.zoom-btn{padding:4px 10px;font-size:16px;min-width:32px;text-align:center}
+.viewer-nav{padding:10px 20px;display:flex;align-items:center;justify-content:center;gap:16px;color:white;font-size:18px}
+
+/* === ORGANIZE === */
+#view-organize{flex-direction:row}
+.org-main{flex:1;display:flex;flex-direction:column;padding:16px;border-right:1px solid var(--border);background:var(--bg);min-width:0}
+.org-sidebar{width:380px;display:flex;flex-direction:column;background:var(--panel-2);overflow:hidden;flex-shrink:0}
+.org-toolbar{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--panel);border-bottom:1px solid var(--border)}
+.org-counter{font-size:13px;color:var(--text-dim)}.org-counter b{color:var(--text-bright);font-size:18px}
+.org-trash-btn{width:36px;height:36px;border-radius:50%;background:var(--panel-2);border:2px solid var(--border);color:var(--text-dim);font-size:16px;display:flex;align-items:center;justify-content:center;transition:all .15s;margin-left:8px;cursor:pointer}
+.org-trash-btn:hover{border-color:var(--danger);color:var(--danger)}.org-trash-btn.drop-target{background:var(--danger);color:white;border-color:var(--danger)}
+.org-undo-btn{padding:6px 12px;background:var(--panel-2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-dim);font-size:12px;transition:all .15s;cursor:pointer}
+.org-undo-btn:hover{color:var(--text);border-color:var(--warn)}
+.org-undo-btn.has-undo{color:var(--warn);border-color:var(--warn)}
+.org-preview{flex:1;display:flex;align-items:center;justify-content:center;padding:20px;overflow:hidden;min-height:0}
+.org-preview img{max-width:100%;max-height:100%;object-fit:contain;border-radius:var(--radius);transition:opacity .2s;user-select:none;-webkit-user-drag:element}
+.org-preview.dragging img{opacity:.3}
+.org-nav{padding:8px 14px;display:flex;align-items:center;justify-content:center;gap:12px;background:var(--panel)}
+.org-nav button{padding:4px 14px;background:var(--panel-2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:12px;cursor:pointer}
+.org-nav button:hover{border-color:var(--accent)}
+.org-sidebar-header{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-dim);flex-shrink:0}
+.org-sidebar-tags{display:flex;gap:4px;flex-wrap:wrap;flex:1}
+.org-tag{padding:2px 8px;border-radius:10px;font-size:10px;background:var(--bg);border:1px solid var(--border);color:var(--text-dim);cursor:pointer}
+.org-tag.active{color:white}
+.org-tree{flex:1;overflow-y:auto;padding:4px}
+.tree-node{padding-left:0}
+.tree-row{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:var(--radius-sm);cursor:pointer;transition:all .15s;border:1px solid transparent}
+.tree-row:hover{background:var(--panel);border-color:var(--border)}
+.tree-row.drop-target{background:var(--accent-dim);border-color:var(--accent)}
+.tree-arrow{width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text-dim);flex-shrink:0;transition:transform .15s;cursor:pointer}
+.tree-arrow.expanded{transform:rotate(90deg)}
+.tree-arrow.no-arrow{cursor:default}
+.tree-node-name{font-size:13px;color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tree-node-count{font-size:10px;color:var(--text-dim);flex-shrink:0;background:var(--bg);padding:1px 6px;border-radius:8px}
+.tree-children{display:none}.tree-children.show{display:block}
+
+/* === TRASH === */
+#view-trash{flex-direction:column}
+.trash-toolbar{padding:12px 16px;display:flex;gap:10px;align-items:center;background:var(--panel-2);border-bottom:1px solid var(--border);flex-shrink:0}
+.trash-grid{flex:1;overflow-y:auto;padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;align-content:start}
+.trash-item{position:relative;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;cursor:pointer}
+.trash-item:hover{border-color:var(--warn)}
+.trash-item img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
+.trash-item .name{font-size:10px;padding:4px 6px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trash-item .actions{display:none;position:absolute;top:4px;right:4px;gap:4px}
+.trash-item:hover .actions{display:flex}
+.trash-item .actions button{padding:2px 6px;font-size:10px;border-radius:3px;border:none;color:white;cursor:pointer}
+.trash-item .act-restore{background:var(--accent)}.trash-item .act-delete{background:var(--danger)}
+
+/* === TAGS === */
+#view-tags{flex-direction:column;padding:20px}
+.tags-header{display:flex;gap:10px;margin-bottom:16px;align-items:center}
+.tags-list{display:flex;flex-wrap:wrap;gap:8px;flex:1;overflow-y:auto;align-content:flex-start}
+.tag-item{display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--panel);border:1px solid var(--border);border-radius:16px;font-size:13px}
+.tag-item .dot{width:10px;height:10px;border-radius:50%}
+.tag-item .del{background:none;border:none;color:var(--text-dim);font-size:14px;padding:0 2px;line-height:1;cursor:pointer}
+.tag-item .del:hover{color:var(--danger)}
+
+/* === SETTINGS === */
+#view-settings{flex-direction:column;padding:20px;max-width:800px;width:100%;overflow-y:auto}
+.setting-row{display:flex;align-items:center;gap:12px;padding:14px;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px}
+.setting-info{flex:1}
+.setting-info .label{font-size:13px;color:var(--text-bright);margin-bottom:4px}
+.setting-info .desc{font-size:11px;color:var(--text-dim)}
+.setting-info .path{font-size:11px;color:var(--accent);margin-top:4px;font-family:Consolas,monospace;word-break:break-all}
+.cache-bar{height:6px;background:var(--bg);border-radius:3px;margin-top:6px;overflow:hidden}
+.cache-bar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-hover));border-radius:3px;transition:width .3s}
+
+/* === COMMON === */
+.btn{padding:6px 14px;background:var(--panel-2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:12px;transition:all .15s;cursor:pointer}
+.btn:hover{border-color:var(--accent);color:var(--text-bright)}
+.btn-primary{background:var(--accent-dim);border-color:var(--accent);color:white}.btn-primary:hover{background:var(--accent)}
+.btn-danger{background:var(--danger);border-color:var(--danger);color:white}.btn-danger:hover{opacity:.9}
+.btn-sm{padding:3px 10px;font-size:11px}
+input[type="text"]{padding:6px 10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:inherit;outline:none;flex:1}
+input[type="text"]:focus{border-color:var(--accent)}
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 18px;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9999}
+#toast.show{opacity:1}#toast.success{border-color:var(--success);color:var(--success)}#toast.error{border-color:var(--danger);color:var(--danger)}
+.empty-state{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:var(--text-dim);font-size:13px}
+.empty-state .icon{font-size:48px;opacity:.5}
+
+/* === FOLDER PICKER === */
+.picker-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:200}
+.picker-overlay.show{display:flex}
+.picker-modal{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);width:700px;max-width:90vw;height:520px;display:flex;flex-direction:column}
+.picker-toolbar{padding:10px;display:flex;gap:6px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.picker-current{flex:1;min-width:280px;padding:6px 10px;background:var(--bg);border-radius:var(--radius-sm);font-family:Consolas,monospace;font-size:13px;color:var(--accent);border:1px solid var(--border);outline:none}
+.picker-current:focus{border-color:var(--accent)}
+.picker-drives{display:flex;gap:4px;padding:6px 10px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.picker-drive{padding:4px 14px;background:var(--panel-2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:12px;cursor:pointer;transition:all .15s;font-weight:500}
+.picker-drive:hover{background:var(--accent-dim);border-color:var(--accent);color:white}
+.picker-list{flex:1;overflow-y:auto;padding:6px}
+.picker-item{padding:6px 10px;border-radius:var(--radius-sm);cursor:pointer;display:flex;align-items:center;gap:8px;font-size:12px}
+.picker-item:hover{background:var(--panel-2)}.picker-item.parent{color:var(--warn)}
+.picker-footer{padding:10px;display:flex;gap:6px;justify-content:flex-end;border-top:1px solid var(--border)}
+
+/* keyboard hint */
+.kbd-hint{font-size:10px;color:var(--text-dim);padding:2px 6px;background:var(--bg);border:1px solid var(--border);border-radius:3px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🖼 图片管理工具 v2</h1>
+  <div class="nav-tabs">
+    <button class="nav-tab active" data-view="albums">📁 相册浏览</button>
+    <button class="nav-tab" data-view="organize">🗂 图库整理</button>
+    <button class="nav-tab" data-view="trash">🗑 垃圾桶</button>
+    <button class="nav-tab" data-view="tags">🏷 标签管理</button>
+    <button class="nav-tab" data-view="settings">⚙ 设置</button>
+  </div>
+  <div class="status-info" id="status-info">未设置目录</div>
+</header>
+
+<!-- ALBUMS -->
+<div class="view active" id="view-albums">
+  <div class="albums-toolbar">
+    <div class="tag-filter" id="albums-tag-filter"></div>
+    <select id="albums-sort" onchange="refAlbums()" style="background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);padding:4px 8px;font-size:12px">
+      <option value="name">📋 名称</option>
+      <option value="time">🕐 时间</option>
+      <option value="count">📊 数量</option>
+    </select>
+    <button class="btn btn-primary" onclick="createAlbumPrompt()">＋ 新建相册</button>
+  </div>
+  <div class="albums-grid" id="albums-grid"></div>
+</div>
+
+<!-- ORGANIZE -->
+<div class="view" id="view-organize">
+  <div class="org-main">
+    <div class="org-toolbar">
+      <div class="org-counter">待整理: <b id="org-count">0</b> 张</div>
+      <button class="org-undo-btn" id="org-undo-btn" onclick="undoLast()" title="撤回上一步操作">↶ 撤回</button>
+      <div class="org-trash-btn" id="org-trash" title="点击或拖入：移到垃圾桶">🗑</div>
+    </div>
+    <div class="org-preview" id="org-preview">
+      <div class="empty-state"><div class="icon">📷</div><div>加载中...</div></div>
+    </div>
+    <div class="org-nav">
+      <button onclick="prevImage()">◀ 上一张</button>
+      <span id="org-index">0/0</span>
+      <button onclick="nextImage()">下一张 ▶</button>
+    </div>
+  </div>
+  <div class="org-sidebar">
+    <div class="org-sidebar-header">
+      <span>📁 相册目录</span>
+      <div class="org-sidebar-tags" id="org-tag-filter"></div>
+    </div>
+    <div class="org-tree" id="org-tree"></div>
+  </div>
+</div>
+
+<!-- TRASH -->
+<div class="view" id="view-trash">
+  <div class="trash-toolbar">
+    <span style="font-size:13px;color:var(--text-dim)">垃圾桶: <b id="trash-count">0</b> 张</span>
+    <button class="btn btn-danger" onclick="emptyTrash()" style="margin-left:auto">🗑 清空全部</button>
+  </div>
+  <div class="trash-grid" id="trash-grid"></div>
+</div>
+
+<!-- TAGS -->
+<div class="view" id="view-tags">
+  <div class="tags-header">
+    <input type="text" id="tag-name-input" placeholder="新标签名称" style="max-width:200px">
+    <input type="color" id="tag-color-input" value="#7c3aed" style="width:42px;height:30px;padding:0;border:1px solid var(--border);border-radius:4px;background:transparent;cursor:pointer">
+    <button class="btn btn-primary" onclick="addTag()">＋ 添加</button>
+    <span style="font-size:11px;color:var(--text-dim);margin-left:auto">共 <b id="tag-count">0</b> 个标签</span>
+  </div>
+  <div class="tags-list" id="tags-list"></div>
+</div>
+
+<!-- SETTINGS -->
+<div class="view" id="view-settings">
+  <h2 style="font-size:18px;margin-bottom:8px">目录设置</h2>
+  <p style="font-size:12px;color:var(--text-dim);margin-bottom:8px">指定图片管理工具使用的各个目录（可位于任意盘符）</p>
+  <div id="settings-list"></div>
+</div>
+
+<!-- DETAIL -->
+<div class="detail-overlay" id="detail-overlay" onclick="if(event.target===this)closeDetail()">
+  <div class="detail-modal">
+    <div class="detail-header">
+      <button class="btn" id="detail-back-btn" onclick="detailGoUp()" style="display:none">⬅ 返回上级</button>
+      <h2 id="detail-name">相册</h2>
+      <button class="btn btn-danger btn-sm" id="detail-del-btn" onclick="deleteCurrentAlbum()" style="display:none" title="删除此相册">🗑 删除</button>
+      <button class="btn" onclick="closeDetail()">✕</button>
+    </div>
+    <div class="detail-batch-bar" id="detail-batch-bar">
+      <span>已选 <span class="batch-count" id="batch-count">0</span> 张</span>
+      <button class="btn btn-sm" onclick="selectAll()">☑ 全选</button>
+      <button class="btn btn-sm" onclick="invertSelection()">↔ 反选</button>
+      <button class="btn btn-primary btn-sm" onclick="batchMove()">📁 移动到</button>
+      <button class="btn btn-danger btn-sm" onclick="batchDelete()">🗑 删除</button>
+      <button class="btn btn-sm" onclick="clearSelection()">取消选择</button>
+    </div>
+    <div class="detail-body" id="detail-body"></div>
+    <div class="tag-picker" id="detail-tag-picker"></div>
+  </div>
+</div>
+
+<!-- MOVE PICKER -->
+<div class="move-pick-overlay" id="move-pick-overlay" onclick="if(event.target===this)closeMovePicker()">
+  <div class="move-pick-modal">
+    <div class="mp-header">📁 移动到哪个相册？</div>
+    <div class="mp-search"><input type="text" id="mp-search" placeholder="搜索相册..." oninput="filterMovePicker()"></div>
+    <div class="mp-list" id="mp-list"></div>
+    <div class="mp-footer"><button class="btn" onclick="closeMovePicker()">取消</button></div>
+  </div>
+</div>
+
+<!-- VIEWER -->
+<div class="viewer-overlay" id="viewer-overlay">
+  <div class="viewer-toolbar">
+    <span id="viewer-name" style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></span>
+    <span id="viewer-zoom-level" style="min-width:48px;text-align:center;font-size:12px">100%</span>
+    <button class="zoom-btn" onclick="viewerZoom(-0.25)" title="缩小">🔍−</button>
+    <button class="zoom-btn" onclick="viewerZoom(0.25)" title="放大">🔍+</button>
+    <button class="zoom-btn" onclick="viewerZoomReset()" title="重置缩放">1:1</button>
+    <button class="btn btn-danger btn-sm" onclick="viewerDelete()" title="移到垃圾桶">🗑 删除</button>
+    <button class="btn btn-primary btn-sm" onclick="viewerMove()" title="移动到其他相册">📁 移动</button>
+    <button onclick="closeViewer()">✕ 关闭</button>
+  </div>
+  <div class="viewer-img-wrap" id="viewer-wrap"><img id="viewer-img" src="" alt=""></div>
+  <div class="viewer-nav">
+    <button class="arrow" onclick="viewerPrev()">◀</button>
+    <span id="viewer-index">1/1</span>
+    <button class="arrow" onclick="viewerNext()">▶</button>
+  </div>
+</div>
+
+<!-- FOLDER PICKER -->
+<div class="picker-overlay" id="picker-overlay">
+  <div class="picker-modal">
+    <div class="picker-toolbar">
+      <input type="text" class="picker-current" id="picker-current" onkeydown="if(event.key==='Enter')pickerGotoPath()" placeholder="输入路径后回车跳转">
+      <button class="btn" onclick="pickerGotoPath()" style="font-weight:500">🔍 跳转</button>
+      <button class="btn" onclick="pickerUp()">⬆ 上级</button>
+    </div>
+    <div class="picker-drives" id="picker-drives"></div>
+    <div class="picker-list" id="picker-list"></div>
+    <div class="picker-footer">
+      <button class="btn" onclick="closePicker()">取消</button>
+      <button class="btn btn-primary" onclick="confirmPicker()">选定此目录</button>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+// ============================================================
+// 全局状态
+// ============================================================
+const S = {
+  view: 'albums',
+  tags: [],
+  albums: [],
+  tagFil: '',
+  pending: [],
+  idx: 0,
+  dAlbum: '',
+  dDetail: null,
+  vImgs: [],
+  vIdx: 0,
+  vZoom: 1,
+  albumsLoaded: false,
+  treeCache: {},
+  selectedImgs: new Set(),
+  allAlbumPaths: [],
+  orgTagFil: '',
+  undoCount: 0
+};
+
+// ============================================================
+// 工具函数
+// ============================================================
+function H(s) {
+  return String(s || '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+function HA(s) {
+  return String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+function toast(m, t) {
+  const x = document.getElementById('toast');
+  x.textContent = m;
+  x.className = 'show ' + (t || '');
+  setTimeout(() => x.className = '', 2200);
+}
+async function api(url, opts) {
+  const r = await fetch(url, opts);
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.detail || d.error || 'Request failed');
+  return d;
+}
+
+// ============================================================
+// 初始化
+// ============================================================
+async function init() {
+  document.querySelectorAll('.nav-tab').forEach(t => {
+    t.addEventListener('click', () => switchView(t.dataset.view));
+  });
+  // 键盘快捷键
+  document.addEventListener('keydown', handleKeyboard);
+  await refreshStatus();
+  await loadTags();
+  await refAlbums();
+  S.albumsLoaded = true;
+}
+
+function handleKeyboard(e) {
+  // 查看器
+  const viewer = document.getElementById('viewer-overlay');
+  if (viewer.classList.contains('show')) {
+    if (e.key === 'ArrowLeft') { e.preventDefault(); viewerPrev(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); viewerNext(); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeViewer(); }
+    return;
+  }
+  // 整理界面
+  if (S.view === 'organize' && S.pending.length) {
+    if (e.key === 'ArrowLeft') { e.preventDefault(); prevImage(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); nextImage(); }
+  }
+  // ESC 关闭弹窗
+  if (e.key === 'Escape') {
+    const detail = document.getElementById('detail-overlay');
+    if (detail.classList.contains('show')) { closeDetail(); return; }
+    const picker = document.getElementById('picker-overlay');
+    if (picker.classList.contains('show')) { closePicker(); return; }
+    const mp = document.getElementById('move-pick-overlay');
+    if (mp.classList.contains('show')) { closeMovePicker(); return; }
+  }
+}
+
+function switchView(v) {
+  S.view = v;
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.view === v));
+  document.querySelectorAll('.view').forEach(x => x.classList.remove('active'));
+  document.getElementById('view-' + v).classList.add('active');
+  if (v === 'albums') {
+    if (!S.albumsLoaded) refAlbums();
+  } else if (v === 'organize') {
+    refOrg();
+    refOrgTree();
+    refUndoCount();
+  } else if (v === 'trash') {
+    refTrash();
+  } else if (v === 'tags') {
+    renderTags();
+  } else if (v === 'settings') {
+    renderSettings();
+  }
+}
+
+// ============================================================
+// 标签管理
+// ============================================================
+async function loadTags() {
+  const d = await api('/api/tags');
+  S.tags = d.tags;
+}
+
+function renderTags() {
+  document.getElementById('tag-count').textContent = S.tags.length;
+  const l = document.getElementById('tags-list');
+  if (!S.tags.length) {
+    l.innerHTML = '<div class="empty-state">暂无标签</div>';
+    return;
+  }
+  l.innerHTML = S.tags.map(t =>
+    `<div class="tag-item"><span class="dot" style="background:${H(t.color)}"></span><span>${H(t.name)}</span><button class="del" onclick="deleteTag(${t.id})" title="删除">✕</button></div>`
+  ).join('');
+}
+
+async function addTag() {
+  const n = document.getElementById('tag-name-input');
+  const c = document.getElementById('tag-color-input');
+  const nm = n.value.trim();
+  if (!nm) { toast('请输入标签名', 'error'); return; }
+  try {
+    await api('/api/tags', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name: nm, color: c.value})
+    });
+    n.value = '';
+    await loadTags();
+    renderTags();
+    toast('已添加', 'success');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function deleteTag(id) {
+  if (!confirm('确定删除此标签？')) return;
+  await api('/api/tags/' + id, {method: 'DELETE'});
+  await loadTags();
+  renderTags();
+  if (S.albumsLoaded) refAlbums();
+  toast('已删除', 'success');
+}
+
+// ============================================================
+// 相册浏览
+// ============================================================
+async function refAlbums() {
+  const sort = document.getElementById('albums-sort')?.value || 'name';
+  let u = '/api/albums?sort=' + sort;
+  if (S.tagFil) u += `&tag_id=${S.tagFil}`;
+  try {
+    const d = await api(u);
+    if (d.error) {
+      document.getElementById('albums-grid').innerHTML =
+        `<div class="empty-state" style="grid-column:1/-1"><div class="icon">⚙</div><div>${H(d.error)}</div></div>`;
+      renAlbTagFil();
+      return;
+    }
+    S.albums = d.albums || [];
+    S.albumsLoaded = true;
+    renAlbGrid();
+    renAlbTagFil();
+  } catch (e) {
+    document.getElementById('albums-grid').innerHTML =
+      `<div class="empty-state" style="grid-column:1/-1"><div class="icon">⚠</div><div>${H(e.message)}</div></div>`;
+  }
+}
+
+function renAlbGrid() {
+  const g = document.getElementById('albums-grid');
+  if (!S.albums.length) {
+    g.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="icon">📁</div><div>暂无相册</div></div>';
+    return;
+  }
+  g.innerHTML = S.albums.map((a, i) => {
+    let ct = '';
+    if (a.tags && a.tags.length) {
+      ct = '<div class="cover-tags">' + a.tags.map(t =>
+        `<span class="cover-tag" style="background:${H(t.color)}">${H(t.name)}</span>`
+      ).join('') + '</div>';
+    }
+    let ch = '📁';
+    if (a.cover) {
+      ch = `<img src="${H(a.cover)}" loading="lazy" onload="this.classList.add('loaded')">` +
+           (a.is_gif ? '<span class="gif-badge">GIF</span>' : '');
+    }
+    return `<div class="album-card" data-ai="${i}">
+      <div class="album-actions"><button class="album-act del" data-ai="${i}" title="删除相册">🗑</button></div>
+      <div class="album-cover">${ct}${ch}</div>
+      <div class="album-info"><div class="album-name" title="${HA(a.name)}">${H(a.name)}</div></div>
+    </div>`;
+  }).join('');
+
+  g.querySelectorAll('.album-act.del').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      const a = S.albums[parseInt(el.dataset.ai)];
+      confirmDeleteAlbum(a.name, a.path);
+    });
+  });
+  g.querySelectorAll('.album-card').forEach(el => {
+    el.addEventListener('click', e => {
+      if (e.target.closest('.album-act')) return;
+      openDetail(S.albums[parseInt(el.dataset.ai)].path);
+    });
+  });
+}
+
+function renAlbTagFil() {
+  const f = document.getElementById('albums-tag-filter');
+  let html = '<span style="font-size:11px;color:var(--text-dim)">🏷</span>';
+  html += `<span class="tag-chip ${S.tagFil === '' ? 'active' : ''}" onclick="filterByTag('')">全部</span>`;
+  html += S.tags.map(t =>
+    `<span class="tag-chip ${S.tagFil == t.id ? 'active' : ''}" onclick="filterByTag(${t.id})"><span class="dot" style="background:${H(t.color)}"></span>${H(t.name)}</span>`
+  ).join('');
+  f.innerHTML = html;
+}
+
+function filterByTag(id) {
+  S.tagFil = id;
+  refAlbums();
+}
+
+async function confirmDeleteAlbum(name, path) {
+  if (!confirm(`确定删除相册「${name}」？\n里面的所有图片都会被移到垃圾桶。`)) return;
+  try {
+    await api('/api/albums/delete', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({album_path: path})
+    });
+    toast('已删除', 'success');
+    refAlbums();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function createAlbumPrompt() {
+  const n = prompt('输入新相册名称');
+  if (!n) return;
+  api('/api/albums/create', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name: n.trim()})
+  }).then(() => { toast('已创建', 'success'); refAlbums(); })
+    .catch(e => toast(e.message, 'error'));
+}
+
+// ============================================================
+// 相册详情
+// ============================================================
+async function openDetail(path) {
+  S.dAlbum = path;
+  S.selectedImgs = new Set();
+  document.getElementById('detail-name').textContent = path || '相册';
+  const hasParent = path.includes('/') || path.includes('\\');
+  document.getElementById('detail-back-btn').style.display = hasParent ? 'inline-block' : 'none';
+  document.getElementById('detail-del-btn').style.display = path ? 'inline-block' : 'none';
+  document.getElementById('detail-body').innerHTML =
+    '<div style="padding:20px;color:var(--text-dim);text-align:center">加载中…</div>';
+  document.getElementById('detail-overlay').classList.add('show');
+  updateBatchBar();
+
+  try {
+    const d = await api('/api/albums/images?path=' + encodeURIComponent(path) + '&limit=2000');
+    S.dDetail = d;
+    let html = '';
+    if (d.children && d.children.length) {
+      html += `<h3>📂 子相册 (${d.children.length})</h3><div class="detail-children">`;
+      d.children.forEach(c => {
+        let cc = '📁';
+        if (c.cover) {
+          cc = `<img src="${H(c.cover)}" loading="lazy">` +
+               (c.is_gif ? '<span class="gif-badge">GIF</span>' : '');
+        }
+        html += `<div class="child-item" data-cp="${HA(c.path)}"><div class="child-cover">${cc}</div><div class="child-info"><div class="child-name">${H(c.name)}</div><div class="child-count">${c.count} 张</div></div></div>`;
+      });
+      html += '</div>';
+    }
+    html += `<h3>🖼 图片 (${d.total})</h3>`;
+    if (d.images && d.images.length) {
+      html += '<div class="detail-images" id="detail-imgs">';
+      d.images.forEach((img, i) => {
+        const src = img.thumb || img.url;
+        const badge = img.is_gif ? '<span class="gif-badge">GIF</span>' : '';
+        html += `<div class="detail-img-wrap" data-ii="${i}"><div class="img-check" data-ic="${i}">✓</div><img src="${H(src)}" loading="lazy" onload="this.classList.add('loaded')" onclick="openViewer(S.dDetail.images,${i})">${badge}</div>`;
+      });
+      html += '</div>';
+    } else {
+      html += '<div style="color:var(--text-dim);font-size:12px;padding:12px">暂无图片</div>';
+    }
+    document.getElementById('detail-body').innerHTML = html;
+
+    document.querySelectorAll('#detail-imgs .detail-img-wrap').forEach(el => {
+      el.addEventListener('click', e => {
+        if (e.target.tagName === 'IMG') return; // 图片点击交给查看器
+        e.stopPropagation();
+        toggleImgSel(parseInt(el.dataset.ii));
+      });
+    });
+    initSwipeSelect();
+    document.querySelectorAll('.child-item').forEach(el => {
+      el.addEventListener('click', () => openDetail(el.dataset.cp));
+    });
+
+    // 标签选择器
+    const td = await api('/api/albums/tags?path=' + encodeURIComponent(path));
+    const curIds = td.tags.map(t => t.id);
+    const picker = document.getElementById('detail-tag-picker');
+    if (S.tags.length) {
+      picker.innerHTML = S.tags.map(t => {
+        const active = curIds.includes(t.id);
+        return `<span class="tag-pick ${active ? 'active' : ''}" data-tid="${t.id}" style="${active ? `background:${H(t.color)};border-color:${H(t.color)}` : ''}"><span class="dot" style="background:${H(t.color)}"></span>${H(t.name)}</span>`;
+      }).join('');
+      picker.querySelectorAll('.tag-pick').forEach(el => {
+        el.addEventListener('click', () => toggleAlbumTag(parseInt(el.dataset.tid)));
+      });
+    } else {
+      picker.innerHTML = '<span style="color:var(--text-dim);font-size:12px">暂无标签，请先在标签管理中添加</span>';
+    }
+    loadAllAlbumPaths();
+  } catch (e) {
+    document.getElementById('detail-body').innerHTML =
+      `<div style="padding:20px;color:var(--danger);text-align:center">${H(e.message)}</div>`;
+  }
+}
+
+function toggleImgSel(i) {
+  if (S.selectedImgs.has(i)) S.selectedImgs.delete(i);
+  else S.selectedImgs.add(i);
+  syncImgSelUI();
+  updateBatchBar();
+}
+
+function syncImgSelUI() {
+  document.querySelectorAll('#detail-imgs .detail-img-wrap').forEach(el => {
+    const ii = parseInt(el.dataset.ii);
+    el.classList.toggle('selected', S.selectedImgs.has(ii));
+    const ck = el.querySelector('.img-check');
+    if (ck) ck.classList.toggle('checked', S.selectedImgs.has(ii));
+  });
+}
+
+// === 长按滑动多选 ===
+let swipeActive = false;
+let swipeMode = null;
+let swipeTouched = new Set();
+let swipeWasActive = false;
+
+function initSwipeSelect() {
+  const grid = document.getElementById('detail-imgs');
+  if (!grid) return;
+
+  grid.addEventListener('mousedown', e => {
+    const wrap = e.target.closest('.detail-img-wrap');
+    if (!wrap) return;
+    e.preventDefault();
+    const ii = parseInt(wrap.dataset.ii);
+    swipeActive = true;
+    swipeMode = S.selectedImgs.has(ii) ? 'deselect' : 'select';
+    swipeTouched = new Set();
+    toggleImgSel(ii);
+    swipeTouched.add(ii);
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!swipeActive) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const wrap = el ? el.closest('.detail-img-wrap') : null;
+    if (!wrap) return;
+    const ii = parseInt(wrap.dataset.ii);
+    if (isNaN(ii) || swipeTouched.has(ii)) return;
+    swipeTouched.add(ii);
+    if (swipeMode === 'select') {
+      if (!S.selectedImgs.has(ii)) {
+        S.selectedImgs.add(ii);
+        syncImgSelUI();
+        updateBatchBar();
+      }
+    } else {
+      if (S.selectedImgs.has(ii)) {
+        S.selectedImgs.delete(ii);
+        syncImgSelUI();
+        updateBatchBar();
+      }
+    }
+  });
+
+  document.addEventListener('mouseup', () => {
+    swipeActive = false;
+    swipeMode = null;
+    swipeTouched = new Set();
+  });
+}
+
+function clearSelection() {
+  S.selectedImgs = new Set();
+  syncImgSelUI();
+  updateBatchBar();
+}
+
+function selectAll() {
+  const total = S.dDetail ? S.dDetail.images.length : 0;
+  if (S.selectedImgs.size === total) {
+    clearSelection();
+    return;
+  }
+  S.selectedImgs = new Set();
+  for (let i = 0; i < total; i++) S.selectedImgs.add(i);
+  syncImgSelUI();
+  updateBatchBar();
+}
+
+function invertSelection() {
+  const total = S.dDetail ? S.dDetail.images.length : 0;
+  const next = new Set();
+  for (let i = 0; i < total; i++) {
+    if (!S.selectedImgs.has(i)) next.add(i);
+  }
+  S.selectedImgs = next;
+  syncImgSelUI();
+  updateBatchBar();
+}
+
+function updateBatchBar() {
+  const n = S.selectedImgs.size;
+  document.getElementById('batch-count').textContent = n;
+  document.getElementById('detail-batch-bar').classList.toggle('show', n > 0);
+}
+
+async function batchDelete() {
+  if (!S.selectedImgs.size || !S.dDetail) return;
+  const names = S.dDetail.images.filter((_, i) => S.selectedImgs.has(i)).map(x => x.name);
+  if (!confirm(`确定删除选中的 ${names.length} 张图片？将移到垃圾桶。`)) return;
+  try {
+    const d = await api('/api/albums/delete_images', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({album_path: S.dAlbum, image_names: names})
+    });
+    toast(`已删除 ${d.deleted} 张`, 'success');
+    S.selectedImgs = new Set();
+    openDetail(S.dAlbum);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function batchMove() {
+  if (!S.selectedImgs.size || !S.dDetail) return;
+  document.getElementById('move-pick-overlay').classList.add('show');
+  document.getElementById('mp-search').value = '';
+  if (!S.allAlbumPaths.length) await loadAllAlbumPaths();
+  renderMovePicker(S.allAlbumPaths);
+}
+
+function renderMovePicker(paths) {
+  const l = document.getElementById('mp-list');
+  if (!paths.length) {
+    l.innerHTML = '<div style="padding:12px;color:var(--text-dim)">无可用相册</div>';
+    return;
+  }
+  l.innerHTML = paths.map(a =>
+    `<div class="mp-item" data-mp="${HA(a)}"><span>📁 ${H(a)}</span></div>`
+  ).join('');
+  l.querySelectorAll('.mp-item').forEach(el => {
+    el.addEventListener('click', async () => {
+      const target = el.dataset.mp;
+      closeMovePicker();
+      const names = S.dDetail.images.filter((_, i) => S.selectedImgs.has(i)).map(x => x.name);
+      try {
+        const d = await api('/api/albums/move_images', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({album_path: S.dAlbum, image_names: names, target_album: target})
+        });
+        toast(`已移动 ${d.moved} 张`, 'success');
+        S.selectedImgs = new Set();
+        openDetail(S.dAlbum);
+      } catch (e) { toast(e.message, 'error'); }
+    });
+  });
+}
+
+function filterMovePicker() {
+  const q = document.getElementById('mp-search').value.toLowerCase().trim();
+  if (!q) { renderMovePicker(S.allAlbumPaths); return; }
+  renderMovePicker(S.allAlbumPaths.filter(p => p.toLowerCase().includes(q)));
+}
+
+function closeMovePicker() {
+  document.getElementById('move-pick-overlay').classList.remove('show');
+}
+
+async function loadAllAlbumPaths() {
+  try {
+    const d = await api('/api/albums/all_paths');
+    S.allAlbumPaths = d.paths || [];
+  } catch (e) { S.allAlbumPaths = []; }
+}
+
+async function deleteCurrentAlbum() {
+  if (!S.dAlbum) return;
+  const name = S.dAlbum.split(/[\\/]/).pop();
+  if (!confirm(`确定删除相册「${name}」？\n里面的所有图片都会被移到垃圾桶。`)) return;
+  try {
+    await api('/api/albums/delete', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({album_path: S.dAlbum})
+    });
+    closeDetail();
+    toast('已删除', 'success');
+    refAlbums();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function detailGoUp() {
+  if (!S.dAlbum) return;
+  const p = S.dAlbum.replace(/\\/g, '/').split('/');
+  p.pop();
+  openDetail(p.join('/') || '');
+}
+
+async function toggleAlbumTag(tid) {
+  if (!S.dAlbum) return;
+  const path = S.dAlbum;  // 在异步操作前捕获当前值
+  const picker = document.getElementById('detail-tag-picker');
+  const activeEl = picker.querySelector(`.tag-pick[data-tid="${tid}"]`);
+  const wasActive = activeEl && activeEl.classList.contains('active');
+  // UI 立即更新（乐观）
+  if (activeEl) {
+    if (wasActive) {
+      activeEl.classList.remove('active');
+      activeEl.style.background = '';
+      activeEl.style.borderColor = '';
+    } else {
+      const t = S.tags.find(t => t.id === tid);
+      activeEl.classList.add('active');
+      activeEl.style.background = H(t ? t.color : '');
+      activeEl.style.borderColor = H(t ? t.color : '');
+    }
+  }
+  // 后端同步（用捕获的 path）
+  const d = await api('/api/albums/tags?path=' + encodeURIComponent(path));
+  let ids = d.tags.map(t => t.id);
+  if (ids.includes(tid)) ids = ids.filter(i => i !== tid);
+  else ids.push(tid);
+  try {
+    await api('/api/albums/tags', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({path: path, tag_ids: ids})
+    });
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+function closeDetail() {
+  document.getElementById('detail-overlay').classList.remove('show');
+  S.dAlbum = '';
+  S.dDetail = null;
+  S.selectedImgs = new Set();
+}
+
+// ============================================================
+// 图片查看器
+// ============================================================
+function openViewer(imgs, idx) {
+  S.vImgs = imgs;
+  S.vIdx = idx;
+  S.vZoom = 1;
+  S.vPanX = 0;
+  S.vPanY = 0;
+  renViewer();
+  document.getElementById('viewer-overlay').classList.add('show');
+  // 滚轮缩放
+  const wrap = document.getElementById('viewer-wrap');
+  wrap.onwheel = function(e) {
+    e.preventDefault();
+    const prev = S.vZoom;
+    S.vZoom = Math.max(0.25, Math.min(5, S.vZoom + (e.deltaY < 0 ? 0.1 : -0.1)));
+    if (S.vZoom <= 1) { S.vPanX = 0; S.vPanY = 0; }
+    applyZoom();
+  };
+  // 拖拽平移
+  let dragging = false, sx = 0, sy = 0, px = 0, py = 0;
+  wrap.onmousedown = function(e) {
+    if (S.vZoom <= 1) return;
+    dragging = true; sx = e.clientX; sy = e.clientY;
+    px = S.vPanX; py = S.vPanY;
+    wrap.classList.add('grabbing');
+  };
+  window._viewerMouseMove = function(e) {
+    if (!dragging) return;
+    S.vPanX = px + (e.clientX - sx);
+    S.vPanY = py + (e.clientY - sy);
+    applyZoom();
+  };
+  window._viewerMouseUp = function() {
+    dragging = false;
+    wrap.classList.remove('grabbing');
+  };
+  document.addEventListener('mousemove', window._viewerMouseMove);
+  document.addEventListener('mouseup', window._viewerMouseUp);
+}
+function applyZoom() {
+  const img = document.getElementById('viewer-img');
+  img.style.transform = `translate(${S.vPanX}px,${S.vPanY}px) scale(${S.vZoom})`;
+  document.getElementById('viewer-zoom-level').textContent = Math.round(S.vZoom * 100) + '%';
+}
+function viewerZoom(d) {
+  S.vZoom = Math.max(0.25, Math.min(5, S.vZoom + d));
+  applyZoom();
+}
+function viewerZoomReset() { S.vZoom = 1; S.vPanX = 0; S.vPanY = 0; applyZoom(); }
+function renViewer() {
+  const i = S.vImgs[S.vIdx];
+  document.getElementById('viewer-img').src = i.url;
+  document.getElementById('viewer-name').textContent = i.name;
+  document.getElementById('viewer-index').textContent = `${S.vIdx + 1}/${S.vImgs.length}`;
+  S.vZoom = 1; S.vPanX = 0; S.vPanY = 0;
+  applyZoom();
+}
+function viewerPrev() { if (S.vIdx > 0) { S.vIdx--; renViewer(); } }
+function viewerNext() { if (S.vIdx < S.vImgs.length - 1) { S.vIdx++; renViewer(); } }
+function closeViewer() {
+  document.getElementById('viewer-overlay').classList.remove('show');
+  S.vZoom = 1; S.vPanX = 0; S.vPanY = 0;
+  if (window._viewerMouseMove) document.removeEventListener('mousemove', window._viewerMouseMove);
+  if (window._viewerMouseUp) document.removeEventListener('mouseup', window._viewerMouseUp);
+}
+
+async function viewerDelete() {
+  const img = S.vImgs[S.vIdx];
+  if (!img) return;
+  if (!confirm(`确定将「${img.name}」移至垃圾桶？`)) return;
+  try {
+    await api('/api/albums/single_action', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({action: 'delete', image_path: img.path})
+    });
+    toast('已移至垃圾桶', 'success');
+    S.vImgs.splice(S.vIdx, 1);
+    if (!S.vImgs.length) { closeViewer(); return; }
+    if (S.vIdx >= S.vImgs.length) S.vIdx = S.vImgs.length - 1;
+    renViewer();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function viewerMove() {
+  const img = S.vImgs[S.vIdx];
+  if (!img) return;
+  document.getElementById('move-pick-overlay').classList.add('show');
+  document.getElementById('mp-search').value = '';
+  if (!S.allAlbumPaths.length) await loadAllAlbumPaths();
+  // 过滤掉当前所在相册
+  let paths = S.allAlbumPaths.filter(p => {
+    const cur = img.path.replace(/\\/g, '/').split('/').slice(0, -1).join('/');
+    return p !== cur;
+  });
+  renderMovePickerForViewer(paths, img);
+}
+
+async function renderMovePickerForViewer(paths, img) {
+  const l = document.getElementById('mp-list');
+  if (!paths.length) {
+    l.innerHTML = '<div style="padding:12px;color:var(--text-dim)">无可用相册</div>';
+    return;
+  }
+  l.innerHTML = paths.map(a => `<div class="mp-item" data-mp="${HA(a)}"><span>📁 ${H(a)}</span></div>`).join('');
+  l.querySelectorAll('.mp-item').forEach(el => {
+    el.addEventListener('click', async () => {
+      const target = el.dataset.mp;
+      closeMovePicker();
+      try {
+        const d = await api('/api/albums/single_action', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({action: 'move', image_path: img.path, target_album: target})
+        });
+        toast('已移动', 'success');
+        S.vImgs.splice(S.vIdx, 1);
+        if (!S.vImgs.length) { closeViewer(); return; }
+        if (S.vIdx >= S.vImgs.length) S.vIdx = S.vImgs.length - 1;
+        renViewer();
+      } catch (e) { toast(e.message, 'error'); }
+    });
+  });
+}
+
+// ============================================================
+// 图库整理
+// ============================================================
+async function refOrg() {
+  try {
+    const d = await api('/api/organize/pending');
+    if (d.error) {
+      S.pending = [];
+      document.getElementById('org-preview').innerHTML =
+        `<div class="empty-state"><div class="icon">📷</div><div>${H(d.error)}</div></div>`;
+      document.getElementById('org-count').textContent = '0';
+      document.getElementById('org-index').textContent = '0/0';
+      return;
+    }
+    S.pending = d.images;
+    S.idx = 0;
+    document.getElementById('org-count').textContent = d.count;
+    renCurrent();
+  } catch (e) {
+    document.getElementById('org-preview').innerHTML =
+      `<div class="empty-state"><div class="icon">⚠</div><div>${H(e.message)}</div></div>`;
+  }
+}
+
+function renCurrent() {
+  const el = document.getElementById('org-preview');
+  document.getElementById('org-index').textContent =
+    S.pending.length ? `${S.idx + 1}/${S.pending.length}` : '0/0';
+  const nav = document.querySelector('.org-nav');
+  if (!S.pending.length) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">📷</div><div>没有待整理的图片</div></div>';
+    nav.style.display = 'none';
+    return;
+  }
+  nav.style.display = 'flex';
+  const i = S.pending[S.idx];
+  if (!i) return;
+  // 使用原图而非缩略图作为大图预览（更清晰）
+  el.innerHTML = `<img src="${H(i.url)}" draggable="true" data-name="${HA(i.name)}" alt="">`;
+  const imgEl = el.querySelector('img');
+  imgEl.addEventListener('dragstart', e => {
+    e.dataTransfer.setData('text/plain', i.name);
+    e.dataTransfer.effectAllowed = 'move';
+    el.classList.add('dragging');
+  });
+  imgEl.addEventListener('dragend', () => el.classList.remove('dragging'));
+}
+
+function prevImage() { if (S.idx > 0) { S.idx--; renCurrent(); } }
+function nextImage() { if (S.idx < S.pending.length - 1) { S.idx++; renCurrent(); } }
+
+async function moveToAlbum(path) {
+  if (!S.pending[S.idx]) return;
+  const n = S.pending[S.idx].name;
+  try {
+    await api('/api/organize/move', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({image_name: n, album_path: path})
+    });
+    S.pending.splice(S.idx, 1);
+    if (S.idx >= S.pending.length) S.idx = Math.max(0, S.pending.length - 1);
+    renCurrent();
+    document.getElementById('org-count').textContent = S.pending.length;
+    toast('已移动', 'success');
+    refUndoCount();
+    // 刷新树计数
+    S.treeCache = {};
+    refOrgTree();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function moveToTrash() {
+  if (!S.pending[S.idx]) return;
+  fetch('/api/organize/trash', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({image_name: S.pending[S.idx].name})
+  }).then(async r => {
+    const d = await r.json();
+    if (r.ok) {
+      S.pending.splice(S.idx, 1);
+      if (S.idx >= S.pending.length) S.idx = Math.max(0, S.pending.length - 1);
+      renCurrent();
+      document.getElementById('org-count').textContent = S.pending.length;
+      toast('已移至垃圾桶', 'success');
+      refUndoCount();
+    } else toast(d.detail || '操作失败', 'error');
+  });
+}
+
+async function undoLast() {
+  try {
+    const d = await api('/api/organize/undo', {method: 'POST'});
+    if (d.ok) {
+      toast(`已撤回: ${d.undone}`, 'success');
+      await refOrg();
+      refUndoCount();
+      S.treeCache = {};
+      refOrgTree();
+    } else {
+      toast(d.msg || '无可撤销', 'error');
+    }
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function refUndoCount() {
+  try {
+    const d = await api('/api/organize/undo_count');
+    S.undoCount = d.count;
+    const btn = document.getElementById('org-undo-btn');
+    if (d.count > 0) {
+      btn.classList.add('has-undo');
+      btn.title = `撤回上一步操作（可撤回 ${d.count} 步）`;
+    } else {
+      btn.classList.remove('has-undo');
+      btn.title = '撤回上一步操作';
+    }
+  } catch (e) {}
+}
+
+// 整理界面树
+async function refOrgTree() {
+  const treeEl = document.getElementById('org-tree');
+  treeEl.innerHTML = '<div style="padding:20px;color:var(--text-dim);font-size:12px;text-align:center">加载中...</div>';
+  try {
+    const d = await api('/api/albums/tree');
+    if (d.error) {
+      treeEl.innerHTML = `<div style="padding:20px;color:var(--warn);font-size:12px;text-align:center">${H(d.error)}</div>`;
+      return;
+    }
+    renderTreeLevel(d.tree || [], treeEl, 0);
+  } catch (e) {
+    treeEl.innerHTML = `<div style="padding:20px;color:var(--danger);font-size:12px;text-align:center">${H(e.message)}</div>`;
+  }
+}
+
+function renderTreeLevel(nodes, container, lvl) {
+  if (!nodes.length) {
+    container.innerHTML = '<div style="padding:20px;color:var(--text-dim);font-size:12px;text-align:center">无相册</div>';
+    return;
+  }
+  let h = '';
+  nodes.forEach(n => {
+    const has = n.has_children;
+    const fc = n.file_count >= 0 ? n.file_count : '';
+    h += `<div class="tree-node">
+      <div class="tree-row" style="padding-left:${8 + lvl * 16}px" data-mp="${HA(n.path)}">
+        <span class="tree-arrow${has ? '' : ' no-arrow'}" data-ta="${HA(n.path)}">${has ? '▶' : ''}</span>
+        <span class="tree-node-name">📁 ${H(n.name)}</span>
+        <span class="tree-node-count">${fc}</span>
+      </div>
+      <div class="tree-children" id="tc-${HA(n.path)}"></div>
+    </div>`;
+  });
+  container.innerHTML = h;
+  container.querySelectorAll('.tree-arrow:not(.no-arrow)').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      toggleTreeNode(el, el.dataset.ta);
+    });
+  });
+  bindTreeRowEvents(container);
+}
+
+function bindTreeRowEvents(container) {
+  container.querySelectorAll('.tree-row').forEach(el => {
+    el.addEventListener('click', () => moveToAlbum(el.dataset.mp));
+    el.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      el.classList.add('drop-target');
+    });
+    el.addEventListener('dragleave', () => el.classList.remove('drop-target'));
+    el.addEventListener('drop', e => {
+      e.preventDefault();
+      el.classList.remove('drop-target');
+      const nm = e.dataTransfer.getData('text/plain');
+      const j = S.pending.findIndex(i => i.name === nm);
+      if (j >= 0) {
+        S.idx = j;
+        moveToAlbum(el.dataset.mp);
+      }
+    });
+  });
+}
+
+async function toggleTreeNode(el, path) {
+  const tc = document.getElementById('tc-' + path);
+  if (!tc) return;
+  if (tc.classList.contains('show')) {
+    tc.classList.remove('show');
+    el.classList.remove('expanded');
+    return;
+  }
+  if (S.treeCache[path]) {
+    renderTreeLevel(S.treeCache[path], tc, path.split(/[\\/]/).length);
+    tc.classList.add('show');
+    el.classList.add('expanded');
+    return;
+  }
+  try {
+    const d = await api('/api/albums/tree_expand?path=' + encodeURIComponent(path));
+    if (d.children && d.children.length) {
+      S.treeCache[path] = d.children;
+      renderTreeLevel(d.children, tc, path.split(/[\\/]/).length);
+      tc.classList.add('show');
+      el.classList.add('expanded');
+    }
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// 垃圾桶按钮（点击+拖放）
+const tb = document.getElementById('org-trash');
+tb.addEventListener('click', moveToTrash);
+tb.addEventListener('dragover', e => {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  tb.classList.add('drop-target');
+});
+tb.addEventListener('dragleave', () => tb.classList.remove('drop-target'));
+tb.addEventListener('drop', e => {
+  e.preventDefault();
+  tb.classList.remove('drop-target');
+  const nm = e.dataTransfer.getData('text/plain');
+  const j = S.pending.findIndex(i => i.name === nm);
+  if (j >= 0) {
+    S.idx = j;
+    moveToTrash();
+  }
+});
+
+// ============================================================
+// 垃圾桶
+// ============================================================
+async function refTrash() {
+  try {
+    const d = await api('/api/trash');
+    document.getElementById('trash-count').textContent = d.count;
+    const g = document.getElementById('trash-grid');
+    const hasContent = (d.folders && d.folders.length) || (d.images && d.images.length);
+    if (!hasContent) {
+      g.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><div class="icon">🗑</div><div>垃圾桶是空的</div>${d.error ? `<div style="font-size:11px">${H(d.error)}</div>` : ''}</div>`;
+      return;
+    }
+    let html = '';
+    // 文件夹
+    (d.folders || []).forEach(f => {
+      html += `<div class="trash-item" style="background:var(--accent-dim);border-color:var(--accent)">
+        <div class="name" title="${HA(f.name)}" style="padding:16px 8px;text-align:center;font-size:14px">📁 ${H(f.name)}<br><span style="font-size:10px">${f.file_count} 张</span></div>
+        <div class="actions">
+          <button class="act-restore" onclick="restoreTrashFolder('${HA(f.name)}')">恢复</button>
+          <button class="act-delete" onclick="deleteTrashFolder('${HA(f.name)}')">彻底删除</button>
+        </div>
+      </div>`;
+    });
+    // 图片
+    (d.images || []).forEach(img => {
+      const src = img.thumb || img.url;
+      html += `<div class="trash-item">
+        <img src="${H(src)}" loading="lazy">
+        <div class="name" title="${HA(img.name)}">${H(img.name)}</div>
+        <div class="actions">
+          <button class="act-restore" onclick="restoreTrash('${HA(img.name)}')">恢复</button>
+          <button class="act-delete" onclick="deleteTrash('${HA(img.name)}')">彻底删除</button>
+        </div>
+      </div>`;
+    });
+    g.innerHTML = html;
+  } catch (e) {
+    document.getElementById('trash-grid').innerHTML =
+      `<div class="empty-state" style="grid-column:1/-1"><div class="icon">⚠</div><div>${H(e.message)}</div></div>`;
+  }
+}
+
+async function restoreTrashFolder(name) {
+  try {
+    await api('/api/trash/restore', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name: name, is_folder: true})
+    });
+    toast('已恢复到待整理目录', 'success');
+    refTrash();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function deleteTrashFolder(name) {
+  if (!confirm(`确定彻底删除文件夹「${name}」？此操作不可恢复。`)) return;
+  try {
+    await api('/api/trash/delete', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name: name, is_folder: true})
+    });
+    toast('已永久删除', 'success');
+    refTrash();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function restoreTrash(name) {
+  try {
+    await api('/api/trash/restore', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({image_name: name})
+    });
+    toast('已恢复到待整理目录', 'success');
+    refTrash();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function deleteTrash(name) {
+  if (!confirm('确定彻底删除？此操作不可恢复。')) return;
+  try {
+    await api('/api/trash/delete', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({image_name: name})
+    });
+    toast('已永久删除', 'success');
+    refTrash();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function emptyTrash() {
+  if (!confirm('确定清空垃圾桶？所有文件将永久删除。')) return;
+  try {
+    const d = await api('/api/trash/empty', {method: 'POST'});
+    toast(`已永久删除 ${d.deleted} 张`, 'success');
+    refTrash();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ============================================================
+// 设置
+// ============================================================
+async function renderSettings() {
+  const s = await api('/api/settings');
+  let cacheHtml = '';
+  try {
+    const c = await api('/api/thumb/stats');
+    const sizePercent = Math.min(100, (c.size_bytes / (500 * 1024 * 1024)) * 100);
+    cacheHtml = `
+    <div class="setting-row">
+      <div class="setting-info">
+        <div class="label">🖼 预览图缓存</div>
+        <div class="desc">${c.count} 个文件 · ${c.size_formatted}</div>
+        <div class="path">${H(c.cache_dir || '')}</div>
+        <div class="cache-bar"><div class="cache-bar-fill" style="width:${sizePercent}%"></div></div>
+      </div>
+      <button class="btn btn-danger" onclick="clearThumbCache()">清空缓存</button>
+      ${c.cache_dir ? `<button class="btn" onclick="openFolder('${HA(c.cache_dir)}')" title="打开目录">📂</button>` : ''}
+    </div>`;
+  } catch (e) {}
+
+  document.getElementById('settings-list').innerHTML = `
+    <div class="setting-row">
+      <div class="setting-info">
+        <div class="label">📂 待整理目录（图库整理）</div>
+        <div class="desc">存放待整理的散图，图库整理界面从这里读取图片</div>
+        <div class="path">${H(s.organize_dir || '未设置')}</div>
+      </div>
+      <button class="btn btn-primary" onclick="openPicker('organize')">选择</button>
+      ${s.organize_dir ? `<button class="btn" onclick="openFolder('${HA(s.organize_dir)}')" title="打开目录">📂</button>` : ''}
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <div class="label">📁 相册根目录（相册浏览）</div>
+        <div class="desc">存放已整理的相册，该目录下的不同文件夹视为不同相册，支持嵌套</div>
+        <div class="path">${H(s.albums_dir || '未设置')}</div>
+      </div>
+      <button class="btn btn-primary" onclick="openPicker('albums')">选择</button>
+      ${s.albums_dir ? `<button class="btn" onclick="openFolder('${HA(s.albums_dir)}')" title="打开目录">📂</button>` : ''}
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <div class="label">🗑 垃圾桶目录</div>
+        <div class="desc">删除的图片存放位置（留空则默认为 待整理目录\\__trash__）</div>
+        <div class="path">${H(s.trash_dir || '待整理目录\\__trash__（默认）')}</div>
+      </div>
+      <button class="btn btn-primary" onclick="openPicker('trash')">选择</button>
+      ${s.trash_effective ? `<button class="btn" onclick="openFolder('${HA(s.trash_effective)}')" title="打开目录">📂</button>` : ''}
+    </div>
+    ${cacheHtml}
+  `;
+}
+
+async function openFolder(path) {
+  await api('/api/open_folder', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({path: path})
+  });
+}
+
+async function clearThumbCache() {
+  if (!confirm('确定清空所有预览图缓存？')) return;
+  try {
+    const d = await api('/api/thumb/clear', {method: 'POST'});
+    toast(`已清空 ${d.deleted} 个缓存文件`, 'success');
+    renderSettings();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function refreshStatus() {
+  const s = await api('/api/settings');
+  const el = document.getElementById('status-info');
+  if (s.organize_dir && s.albums_dir) {
+    el.textContent = '✓ 目录已就绪';
+    el.className = 'status-info ok';
+  } else {
+    el.textContent = '⚠ 请先设置目录';
+    el.className = 'status-info warn';
+  }
+}
+
+// ============================================================
+// 文件夹选择器
+// ============================================================
+let pRole = '', pPath = '';
+
+async function openPicker(role) {
+  pRole = role;
+  pPath = 'D:\\';
+  document.getElementById('picker-overlay').classList.add('show');
+  renDrives();
+  await pickerNav(pPath);
+}
+
+function renDrives() {
+  const el = document.getElementById('picker-drives');
+  const cur = (pPath || 'C:')[0].toUpperCase();
+  const drives = new Set(['C', 'D', 'E', 'F', 'G', 'H']);
+  drives.add(cur);
+  el.innerHTML = [...drives].sort().map(d =>
+    `<span class="picker-drive" data-pd="${d}:\\">${d}:</span>`
+  ).join('');
+  el.querySelectorAll('.picker-drive').forEach(x => {
+    x.addEventListener('click', () => pickerNav(x.dataset.pd));
+  });
+}
+
+async function pickerGotoPath() {
+  const p = document.getElementById('picker-current').value.trim();
+  if (!p) return;
+  await pickerNav(/^[A-Za-z]:$/.test(p) ? p + '\\' : p);
+}
+
+async function pickerNav(path) {
+  try {
+    const d = await api('/api/fs/list?path=' + encodeURIComponent(path));
+    if (d.error) {
+      document.getElementById('picker-list').innerHTML =
+        `<div style="padding:20px;color:var(--danger);font-size:12px">${H(d.error)}</div>`;
+      return;
+    }
+    pPath = d.current || path;
+    renPickerUI(d);
+  } catch (e) {
+    document.getElementById('picker-list').innerHTML =
+      `<div style="padding:20px;color:var(--danger);font-size:12px">${H(e.message)}</div>`;
+  }
+}
+
+function renPickerUI(data) {
+  document.getElementById('picker-current').value = pPath;
+  renDrives();
+  const l = document.getElementById('picker-list');
+  let h = '';
+  if (data.parent && data.parent !== data.current) {
+    h += `<div class="picker-item parent" data-pi="${HA(data.parent)}">⬆ ..</div>`;
+  }
+  (data.dirs || []).forEach(d => {
+    h += `<div class="picker-item" data-pi="${HA(d.path)}">📁 ${H(d.name)}</div>`;
+  });
+  if (!data.dirs || !data.dirs.length) {
+    h += '<div style="padding:20px;color:var(--text-dim);font-size:12px;text-align:center">空目录</div>';
+  }
+  l.innerHTML = h;
+  l.querySelectorAll('.picker-item[data-pi]').forEach(el => {
+    el.addEventListener('click', () => pickerNav(el.dataset.pi));
+  });
+}
+
+async function pickerUp() {
+  try {
+    const d = await api('/api/fs/list?path=' + encodeURIComponent(pPath));
+    if (d.parent && d.parent !== d.current) await pickerNav(d.parent);
+  } catch (e) {}
+}
+
+async function confirmPicker() {
+  try {
+    const d = await api('/api/settings/pick_folder', {
+      method: 'POST',
+      body: new URLSearchParams({role: pRole, path: pPath})
+    });
+    if (d.ok) {
+      closePicker();
+      renderSettings();
+      refreshStatus();
+      S.albumsLoaded = false;
+      S.treeCache = {};
+      toast('已设置', 'success');
+    }
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function closePicker() {
+  document.getElementById('picker-overlay').classList.remove('show');
+}
+
+// ============================================================
+// 启动
+// ============================================================
+init();
+</script>
+</body>
+</html>

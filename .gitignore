@@ -1,0 +1,5 @@
+thumb_cache/
+*.db
+settings.json
+__pycache__/
+*.pyc
